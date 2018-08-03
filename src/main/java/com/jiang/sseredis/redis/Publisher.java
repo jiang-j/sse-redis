@@ -20,7 +20,7 @@ public class Publisher {
     RedisService redisService;
 
     @Autowired
-    ThreadPoolTaskExecutor taskExecutor;
+    ThreadPoolTaskExecutor pubTaskExecutor;
 
     /**
      * 发布消息
@@ -29,7 +29,7 @@ public class Publisher {
      * @param message 信息
      */
     public void sendMessage(final String channel, final String message) {
-        taskExecutor.execute(() -> {
+        pubTaskExecutor.execute(() -> {
             Long publish = redisService.publish(channel, message);
             LOGGER.info("在: {} 频道发布消息{} - {}", channel, message, publish);
         });

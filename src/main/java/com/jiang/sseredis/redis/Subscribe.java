@@ -19,7 +19,7 @@ public class Subscribe {
     RedisService redisService;
 
     @Autowired
-    ThreadPoolTaskExecutor taskExecutor;
+    ThreadPoolTaskExecutor subTaskExecutor;
     /**
      * 订阅频道
      *
@@ -28,9 +28,10 @@ public class Subscribe {
      */
     public void subscribeChannel(final String channel, final RedisMsgPubSubListener redisMsgPubSubListener) {
 
-        taskExecutor.execute(()->{
+        subTaskExecutor.execute(()->{
             LOGGER.info("在: {} 频道订阅消息", channel);
             redisService.subscribe(redisMsgPubSubListener, channel);
+            LOGGER.info("在: {} 频道订阅消息完成", channel);
         });
     }
 }

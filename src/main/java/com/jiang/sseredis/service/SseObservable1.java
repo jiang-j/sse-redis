@@ -1,7 +1,10 @@
 package com.jiang.sseredis.service;
 
+import com.jiang.sseredis.controller.ConnectionLeakController1;
 import com.jiang.sseredis.redis.RedisMsgPubSubListener;
+import com.jiang.sseredis.redis.Subscribe;
 import com.jiang.sseredis.util.HttpUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpResponse;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter.SseEventBuilder;
@@ -13,46 +16,50 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentHashMap.KeySetView;
 import java.util.function.Consumer;
 
-public class SseObservable1 {
+public class SseObservable1{
 
     private final Long sseTimeoutMs;
 
+    private final String prefixChannel;
+
     private final ConcurrentHashMap<String,KeySetView<Consumer<String>, Boolean>> concurrentHashMap;
 
-    public SseObservable1(Long sseTimeoutMs) {
+    public SseObservable1(Long sseTimeoutMs,String prefixChannel) {
         this.sseTimeoutMs = sseTimeoutMs;
         this.concurrentHashMap =  new ConcurrentHashMap<>();
+        this.prefixChannel = prefixChannel;
     }
 
-    public void send(String uniCode,String orders) {
-        KeySetView<Consumer<String>, Boolean> consumers = concurrentHashMap.get(uniCode);
-      if (null != consumers && consumers.size() > 0){
-          consumers.forEach(it -> it.accept(orders));
-      }else {
-          return;
-      }
+    public void send(String channel, String orders) {
+        String uniCodeAndUid = StringUtils.substringAfter(channel,prefixChannel);
+        String uid = uniCodeAndUid.split("-")[1];
+        KeySetView<Consumer<String>, Boolean> consumers = concurrentHashMap.get(uid);
+        if (null != consumers && consumers.size() > 0){
+            consumers.forEach(it -> it.accept(orders));
+        }else {
+            return;
+        }
     }
 
-    public void subscribeSse(SseEmitter emitter,String uniCode,RedisMsgPubSubListener listener,String channel) {
+    public void subscribeSse(SseEmitter emitter, String uniCode, RedisMsgPubSubListener listener, String channel,String uid) {
 
         Consumer<String> subscription = orderInfos -> {
             SseEventBuilder event = SseEmitter.event().id(uniCode).name("message").reconnectTime(sseTimeoutMs).data(orderInfos);
             trySend(emitter, event);
         };
 
-
         final KeySetView<Consumer<String>, Boolean> consumers =
-          Optional.ofNullable(concurrentHashMap.get(uniCode)).orElseGet(() -> ConcurrentHashMap.newKeySet());
+          Optional.ofNullable(concurrentHashMap.get(uid)).orElseGet(() -> ConcurrentHashMap.newKeySet());
 
         consumers.add(subscription);
-        concurrentHashMap.put(uniCode,consumers);
+        concurrentHashMap.put(uid,consumers);
 
         System.out.println("Subscription added: there are " + concurrentHashMap.size() + " subscribers");
-
         emitter.onCompletion(() -> {
             consumers.remove(subscription);
-            Optional.ofNullable(consumers).orElseGet(() -> concurrentHashMap.remove(uniCode));
-
+            if (consumers.isEmpty()){
+                concurrentHashMap.remove(uid);
+            }
             System.out.println("Subscription completed: there are " + concurrentHashMap.size() + " subscribers");
             listener.unsubscribe(channel);
         });
@@ -75,7 +82,6 @@ public class SseObservable1 {
             .name("greeting").reconnectTime(sseTimeoutMs)
             .data(getOrderList(uniCode));
         trySend(emitter, greetingEvent);
-
         return;
     }
 
@@ -104,14 +110,14 @@ public class SseObservable1 {
         param.put("unAccount","UN112995");
         String result = null;
         try {
-            HttpResponse response = HttpUtils.doGet(url,null,null,new HashMap<>(1),param);
-            result = HttpUtils.convertStreamToString(response.getEntity().getContent());
-            System.out.println(result);
+            //HttpResponse response = HttpUtils.doGet(url,null,null,new HashMap<>(1),param);
+            //result = HttpUtils.convertStreamToString(response.getEntity().getContent());
+            //System.out.println(result);
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-        return result;
+        return uniCode;
     }
 
 
